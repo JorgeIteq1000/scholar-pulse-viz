@@ -1,50 +1,24 @@
 import { format, parseISO, isValid, subDays } from 'date-fns';
+import Papa from 'papaparse';
 
 const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ25AYPgZEudDjhakxxgPNt4IjVlrKWmXzrjgcp7M95YPV23Iib4C7bQ8VAXi_AE49cIfg59Ie9z42X/pub?gid=0&single=true&output=csv';
 
 // Parse CSV data to JSON
 function parseCSV(csvText) {
-  const lines = csvText.split('\n');
-  console.log(`Total lines in CSV: ${lines.length} (including header)`);
-  
-  // Debug das últimas 2 linhas para ver se existe problema
-  const lastTwoLines = lines.slice(-2);
-  console.log('Last two lines:');
-  lastTwoLines.forEach((line, idx) => {
-    const lineNum = lines.length - 2 + idx;
-    console.log(`Line ${lineNum}: "${line}" (length: ${line.length})`);
+  console.log("LOG: Iniciando o parser de CSV com a biblioteca Papa Parse (versão corrigida).");
+
+  const results = Papa.parse(csvText, {
+    header: true,        // Trata a primeira linha como cabeçalho
+    skipEmptyLines: true,  // Pula linhas vazias
+    dynamicTyping: false // GARANTE que todos os dados sejam lidos como texto (string)
   });
-  
-  if (lines.length < 2) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-  console.log(`Expected columns: ${headers.length}`);
-  const data = [];
-  let skippedLines = 0;
-  
-  for (let i = 1; i < lines.length; i++) {
-    const trimmedLine = lines[i].trim();
-    if (trimmedLine) {
-      const values = trimmedLine.split(',').map(v => v.trim().replace(/"/g, ''));
-      
-      // Only log problematic lines
-      if (values.length < headers.length * 0.5) {
-        console.log(`PROBLEM - Line ${i}: only ${values.length} columns, content: "${trimmedLine.substring(0, 100)}..."`);
-        skippedLines++;
-      } else {
-        const row = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || '';
-        });
-        data.push(row);
-      }
-    } else {
-      skippedLines++;
-    }
+
+  if (results.errors.length > 0) {
+    console.error("LOG: Erros encontrados durante o parse do CSV:", results.errors);
   }
-  
-  console.log(`Processed ${data.length} valid records, skipped ${skippedLines} lines`);
-  return data;
+
+  console.log(`LOG: Processados ${results.data.length} registros válidos com Papa Parse.`);
+  return results.data;
 }
 
 // Fetch data from Google Sheets or fallback to local JSON
