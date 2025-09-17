@@ -5,22 +5,37 @@ const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ25A
 // Parse CSV data to JSON
 function parseCSV(csvText) {
   const lines = csvText.split('\n');
+  console.log(`Total lines in CSV: ${lines.length} (including header)`);
+  
   if (lines.length < 2) return [];
   
   const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
   const data = [];
+  let skippedLines = 0;
   
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim()) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-      const row = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index] || '';
-      });
-      data.push(row);
+    const trimmedLine = lines[i].trim();
+    if (trimmedLine) {
+      // Check if line has enough data
+      const values = trimmedLine.split(',').map(v => v.trim().replace(/"/g, ''));
+      
+      // Skip lines that are too short or incomplete
+      if (values.length >= headers.length * 0.5) { // At least 50% of expected columns
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        data.push(row);
+      } else {
+        skippedLines++;
+        console.log(`Skipped line ${i}: insufficient data - ${values.length} columns, expected ~${headers.length}`);
+      }
+    } else {
+      skippedLines++;
     }
   }
   
+  console.log(`Processed ${data.length} valid records, skipped ${skippedLines} lines`);
   return data;
 }
 
