@@ -1,25 +1,209 @@
+import { useState, useEffect, useMemo } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+import { 
+  fetchData, 
+  normalizeData, 
+  calculateKPIs, 
+  calculateStatusMetrics,
+  applyFilters,
+  getFilterOptions 
+} from "@/lib/dataProcessor";
+import { KPICards } from "@/components/KPICards";
+import { StatusCounters } from "@/components/StatusCounters";
+import { FilterPanel } from "@/components/FilterPanel";
+import { StudentTable } from "@/components/StudentTable";
+import { StudentDetailPanel } from "@/components/StudentDetailPanel";
+import { ExportControls } from "@/components/ExportControls";
+import { useToast } from "@/hooks/use-toast";
 
 const queryClient = new QueryClient();
+
+// Initial filter state
+const initialFilters = {
+  curso: 'all',
+  turma: 'all',
+  statusInscricao: 'all',
+  tipoCertificado: 'all',
+  dataInicio: {
+    start: null,
+    end: null
+  }
+};
+
+function Dashboard() {
+  const [rawData, setRawData] = useState([]);
+  const [normalizedData, setNormalizedData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [filters, setFilters] = useState(initialFilters);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
+  const { toast } = useToast();
+
+  // Load data function
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchData();
+      const normalized = normalizeData(data);
+      
+      setRawData(data);
+      setNormalizedData(normalized);
+      setLastUpdate(new Date());
+      
+      toast({
+        title: "Dados atualizados com sucesso!",
+        description: `${data.length} registros carregados.`,
+      });
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Verifique sua conexão e tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial data load
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Auto-refresh every 15 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 15 * 60 * 1000); // 15 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Apply filters to data
+  const filteredData = useMemo(() => {
+    return applyFilters(normalizedData, filters);
+  }, [normalizedData, filters]);
+
+  // Calculate metrics for filtered data
+  const kpis = useMemo(() => {
+    return calculateKPIs(filteredData);
+  }, [filteredData]);
+
+  const statusMetrics = useMemo(() => {
+    return {
+      financeiro: calculateStatusMetrics(filteredData, 'Financeiro'),
+      avaliacao: calculateStatusMetrics(filteredData, 'Avaliacao'),
+      tempoMinimo: calculateStatusMetrics(filteredData, 'Tempo_Minimo'),
+      documentos: calculateStatusMetrics(filteredData, 'Documentos'),
+    };
+  }, [filteredData]);
+
+  // Get filter options from all data (not filtered)
+  const filterOptions = useMemo(() => {
+    return getFilterOptions(normalizedData);
+  }, [normalizedData]);
+
+  // Handle filter changes
+  const handleFiltersChange = (newFilters: typeof filters) => {
+    setFilters(newFilters);
+  };
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setFilters(initialFilters);
+  };
+
+  // Handle student selection
+  const handleViewStudent = (student: any) => {
+    setSelectedStudent(student);
+    setIsDetailPanelOpen(true);
+  };
+
+  const handleCloseDetailPanel = () => {
+    setIsDetailPanelOpen(false);
+    setSelectedStudent(null);
+  };
+
+  if (isLoading && normalizedData.length === 0) {
+    return (
+      <div className="min-h-screen bg-dashboard-bg flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <div className="text-lg font-medium text-foreground">Carregando dashboard...</div>
+          <div className="text-sm text-muted-foreground">Obtendo dados dos estudantes</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-dashboard-bg">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Dashboard de Estudantes
+          </h1>
+          <p className="text-muted-foreground">
+            Análise completa e métricas em tempo real dos dados acadêmicos
+          </p>
+        </div>
+
+        {/* Export Controls */}
+        <div className="mb-6">
+          <ExportControls
+            data={filteredData}
+            kpis={kpis}
+            onRefresh={loadData}
+            isLoading={isLoading}
+            lastUpdate={lastUpdate}
+          />
+        </div>
+
+        {/* Filters */}
+        <FilterPanel
+          filters={filters}
+          filterOptions={filterOptions}
+          onFiltersChange={handleFiltersChange}
+          onClearFilters={handleClearFilters}
+        />
+
+        {/* KPI Cards */}
+        <KPICards kpis={kpis} />
+
+        {/* Status Counters */}
+        <StatusCounters metrics={statusMetrics} />
+
+        {/* Student Table */}
+        <div className="mb-6">
+          <StudentTable
+            students={filteredData}
+            onViewStudent={handleViewStudent}
+          />
+        </div>
+
+        {/* Student Detail Panel */}
+        <StudentDetailPanel
+          student={selectedStudent}
+          isOpen={isDetailPanelOpen}
+          onClose={handleCloseDetailPanel}
+        />
+      </div>
+    </div>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <Dashboard />
     </TooltipProvider>
   </QueryClientProvider>
 );
