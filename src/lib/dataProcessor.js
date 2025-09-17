@@ -7,28 +7,36 @@ function parseCSV(csvText) {
   const lines = csvText.split('\n');
   console.log(`Total lines in CSV: ${lines.length} (including header)`);
   
+  // Debug das últimas 2 linhas para ver se existe problema
+  const lastTwoLines = lines.slice(-2);
+  console.log('Last two lines:');
+  lastTwoLines.forEach((line, idx) => {
+    const lineNum = lines.length - 2 + idx;
+    console.log(`Line ${lineNum}: "${line}" (length: ${line.length})`);
+  });
+  
   if (lines.length < 2) return [];
   
   const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  console.log(`Expected columns: ${headers.length}`);
   const data = [];
   let skippedLines = 0;
   
   for (let i = 1; i < lines.length; i++) {
     const trimmedLine = lines[i].trim();
     if (trimmedLine) {
-      // Check if line has enough data
       const values = trimmedLine.split(',').map(v => v.trim().replace(/"/g, ''));
       
-      // Skip lines that are too short or incomplete
-      if (values.length >= headers.length * 0.5) { // At least 50% of expected columns
+      // Only log problematic lines
+      if (values.length < headers.length * 0.5) {
+        console.log(`PROBLEM - Line ${i}: only ${values.length} columns, content: "${trimmedLine.substring(0, 100)}..."`);
+        skippedLines++;
+      } else {
         const row = {};
         headers.forEach((header, index) => {
           row[header] = values[index] || '';
         });
         data.push(row);
-      } else {
-        skippedLines++;
-        console.log(`Skipped line ${i}: insufficient data - ${values.length} columns, expected ~${headers.length}`);
       }
     } else {
       skippedLines++;
