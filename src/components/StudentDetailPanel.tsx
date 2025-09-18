@@ -155,11 +155,12 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
               <div className="grid grid-cols-2 gap-4">
                 {statusItems.map((item) => (
                   <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <div className="flex items-center gap-2">
-                      <StatusIcon status={item.value} />
-                      <span className="text-sm font-medium">{getStatusLabel(item.value)}</span>
+                    {/* MODIFICAÇÃO AQUI: Adicione um div com flex-col */}
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{item.label}</span>
+                      <span className="text-sm text-muted-foreground">{getStatusLabel(item.value)}</span>
                     </div>
+                    <StatusIcon status={item.value} />
                   </div>
                 ))}
               </div>
