@@ -1,16 +1,16 @@
-import { format, parseISO, isValid, subDays } from 'date-fns';
+import { format, parseISO, isValid, subDays, differenceInCalendarMonths } from 'date-fns';
 import Papa from 'papaparse';
 
 const GOOGLE_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ25AYPgZEudDjhakxxgPNt4IjVlrKWmXzrjgcp7M95YPV23Iib4C7bQ8VAXi_AE49cIfg59Ie9z42X/pub?gid=0&single=true&output=csv';
 
-// Parse CSV data to JSON
+// Parse CSV data to JSON using the robust PapaParse library
 function parseCSV(csvText) {
   console.log("LOG: Iniciando o parser de CSV com a biblioteca Papa Parse (versão corrigida).");
-
+  
   const results = Papa.parse(csvText, {
     header: true,        // Trata a primeira linha como cabeçalho
     skipEmptyLines: true,  // Pula linhas vazias
-    dynamicTyping: false // GARANTE que todos os dados sejam lidos como texto (string)
+    dynamicTyping: false   // GARANTE que todos os dados sejam lidos como texto (string)
   });
 
   if (results.errors.length > 0) {
@@ -24,13 +24,10 @@ function parseCSV(csvText) {
 // Fetch data from Google Sheets or fallback to local JSON
 export async function fetchData() {
   try {
-    // Try Google Sheets first with cache busting
     const timestamp = Date.now();
     const response = await fetch(`${GOOGLE_SHEETS_URL}&t=${timestamp}`, {
       cache: 'no-cache',
-      headers: {
-        'Cache-Control': 'no-cache'
-      }
+      headers: { 'Cache-Control': 'no-cache' }
     });
     
     if (response.ok) {
@@ -45,7 +42,6 @@ export async function fetchData() {
     console.warn('Failed to fetch from Google Sheets:', error);
   }
   
-  // Fallback to local JSON
   try {
     const response = await fetch('/data.json');
     const data = await response.json();
@@ -63,14 +59,12 @@ function parseDate(dateStr) {
     return null;
   }
   
-  // Try DD/MM/YYYY format
   const ddmmyyyy = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (ddmmyyyy) {
     const date = new Date(ddmmyyyy[3], ddmmyyyy[2] - 1, ddmmyyyy[1]);
     return isValid(date) ? date : null;
   }
   
-  // Try YYYY-MM-DD format
   const date = parseISO(dateStr);
   return isValid(date) ? date : null;
 }
@@ -94,7 +88,7 @@ function parsePercentage(fraction) {
   const numerator = parseInt(match[1]);
   const denominator = parseInt(match[2]);
   
-  if (denominator === 0) return 'NA';
+  if (denominator === 0) return 0; // Se o total for 0, o progresso é 0%
   return (numerator / denominator) * 100;
 }
 
@@ -103,18 +97,15 @@ export function normalizeData(rawData) {
   return rawData.map(row => {
     const normalized = { ...row };
     
-    // Normalize dates
     normalized.Data_Inicio_Parsed = parseDate(row['Data Início']);
     normalized.Data_Solic_Digital_Parsed = parseDate(row['Data Solic. Digital']);
     normalized.Data_Solic_Impresso_Parsed = parseDate(row['Data Solic. Impresso']);
     
-    // Normalize status fields
     normalized.Financeiro_Normalized = normalizeStatus(row.Financeiro);
     normalized.Avaliacao_Normalized = normalizeStatus(row.Avaliação);
     normalized.Tempo_Minimo_Normalized = normalizeStatus(row['Tempo mínimo']);
     normalized.Documentos_Normalized = normalizeStatus(row.Documentos);
     
-    // Parse percentages
     normalized.Disciplinas_Percentual = parsePercentage(row.Disciplinas);
     normalized.Cobrancas_Percentual = parsePercentage(row.Cobranças);
     
@@ -122,7 +113,7 @@ export function normalizeData(rawData) {
   });
 }
 
-// Calculate metrics for status fields (Financeiro, Avaliação, etc.)
+// Calculate metrics for status fields
 export function calculateStatusMetrics(data, field) {
   const counts = { ok: 0, error: 0, na: 0 };
   const total = data.length;
@@ -146,16 +137,11 @@ export function calculateStatusMetrics(data, field) {
 
 // Calculate discipline progress metrics
 export function calculateDisciplineProgress(data) {
-  const validData = data.filter(row => 
-    typeof row.Disciplinas_Percentual === 'number' && 
-    !isNaN(row.Disciplinas_Percentual)
-  );
-  
+  const validData = data.filter(row => typeof row.Disciplinas_Percentual === 'number' && !isNaN(row.Disciplinas_Percentual));
   if (validData.length === 0) return { average: 0, byCourseTurma: {} };
   
   const average = validData.reduce((sum, row) => sum + row.Disciplinas_Percentual, 0) / validData.length;
   
-  // Group by course and turma
   const byCourseTurma = {};
   validData.forEach(row => {
     const key = `${row.Curso} - ${row.Turma}`;
@@ -176,35 +162,30 @@ export function calculateDisciplineProgress(data) {
 // Calculate financial status (delinquency)
 export function calculateFinancialStatus(data) {
   const categories = {
-    emDia: 0,        // 100%
-    atrasoLeve: 0,   // 80-99%
-    atrasoMedio: 0,  // 50-79%
-    inadimplenteGrave: 0  // <50%
+    emDia: 0,
+    inadimplente: 0,
+    quitado: 0,
+    na: 0
   };
-  
-  const validData = data.filter(row => 
-    typeof row.Cobrancas_Percentual === 'number' && 
-    !isNaN(row.Cobrancas_Percentual)
-  );
-  
-  validData.forEach(row => {
-    const ratio = row.Cobrancas_Percentual;
-    if (ratio === 100) categories.emDia++;
-    else if (ratio >= 80) categories.atrasoLeve++;
-    else if (ratio >= 50) categories.atrasoMedio++;
-    else categories.inadimplenteGrave++;
+
+  data.forEach(student => {
+    const situation = getFinancialSituation(student);
+    if (situation === 'Em dia') categories.emDia++;
+    else if (situation === 'Inadimplente') categories.inadimplente++;
+    else if (situation === 'Quitado') categories.quitado++;
+    else categories.na++;
   });
+
+  const total = data.length;
+  const totalValid = categories.emDia + categories.inadimplente + categories.quitado;
   
-  const total = validData.length;
   return {
     categories,
     percentages: {
-      emDia: total > 0 ? (categories.emDia / total) * 100 : 0,
-      atrasoLeve: total > 0 ? (categories.atrasoLeve / total) * 100 : 0,
-      atrasoMedio: total > 0 ? (categories.atrasoMedio / total) * 100 : 0,
-      inadimplenteGrave: total > 0 ? (categories.inadimplenteGrave / total) * 100 : 0
+      emDia: totalValid > 0 ? ((categories.emDia + categories.quitado) / totalValid) * 100 : 0,
+      inadimplentes: totalValid > 0 ? (categories.inadimplente / totalValid) * 100 : 0
     },
-    totalValid: total
+    totalValid
   };
 }
 
@@ -242,7 +223,7 @@ export function calculateKPIs(data) {
   return {
     totalStudents: data.length,
     percentEmDia: financial.percentages.emDia,
-    percentInadimplentes: 100 - financial.percentages.emDia,
+    percentInadimplentes: financial.percentages.inadimplentes,
     avgDisciplineProgress: disciplineProgress.average,
     percentDocsOK: documentMetrics.percentages.ok,
     totalCertRequests7d: certificateRequests[7],
@@ -251,13 +232,41 @@ export function calculateKPIs(data) {
   };
 }
 
-// Get financial situation label
-export function getFinancialSituation(percentage) {
-  if (typeof percentage !== 'number' || isNaN(percentage)) return 'N/A';
-  if (percentage === 100) return 'Em dia';
-  if (percentage >= 80) return 'Atraso leve';
-  if (percentage >= 50) return 'Atraso médio';
-  return 'Inadimplente grave';
+// Get financial situation label based on time
+export function getFinancialSituation(student) {
+  const { Cobranças, Data_Inicio_Parsed } = student;
+
+  if (!Cobranças || typeof Cobranças !== 'string' || !Data_Inicio_Parsed || !isValid(Data_Inicio_Parsed)) {
+    return 'N/A';
+  }
+
+  const match = Cobranças.match(/^(\d+)\/(\d+)$/);
+  if (!match) {
+    return 'N/A';
+  }
+
+  const paidInstallments = parseInt(match[1], 10);
+  const totalInstallments = parseInt(match[2], 10);
+
+  if (totalInstallments > 0 && paidInstallments >= totalInstallments) {
+    return 'Quitado';
+  }
+
+  const today = new Date();
+  const startDate = Data_Inicio_Parsed;
+
+  if (startDate > today) {
+    return 'Em dia';
+  }
+  
+  const monthsPassed = differenceInCalendarMonths(today, startDate);
+  const expectedPayments = monthsPassed;
+
+  if (paidInstallments >= expectedPayments) {
+    return 'Em dia';
+  } else {
+    return 'Inadimplente';
+  }
 }
 
 // Apply global filters

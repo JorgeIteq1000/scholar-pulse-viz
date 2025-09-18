@@ -2,7 +2,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { CheckCircle, XCircle, AlertCircle, Calendar, User, GraduationCap, FileText, Award } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -16,28 +15,20 @@ interface Student {
   'Status Inscrição': string;
   'Data Início': string;
   Data_Inicio_Parsed: Date | null;
-  
-  // Status fields
   Financeiro_Normalized: number | string;
   Avaliacao_Normalized: number | string;
   Tempo_Minimo_Normalized: number | string;
   Documentos_Normalized: number | string;
-  
-  // Progress
   Disciplinas_Percentual: number | string;
   Cobrancas_Percentual: number | string;
-  
-  // Certificates
   'Data Solic. Digital': string;
   'Tipo Cert. Digital': string;
   'Status Cert. Digital': string;
   Data_Solic_Digital_Parsed: Date | null;
-  
   'Data Solic. Impresso': string;
   'Tipo Cert. Impresso': string;
   'Status Cert. Impresso': string;
   Data_Solic_Impresso_Parsed: Date | null;
-  
   [key: string]: any;
 }
 
@@ -51,9 +42,9 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
   if (!student) return null;
 
   const StatusIcon = ({ status }: { status: number | string }) => {
-    if (status === 1) return <CheckCircle className="h-4 w-4 text-status-ok" />;
-    if (status === 0) return <XCircle className="h-4 w-4 text-status-error" />;
-    return <AlertCircle className="h-4 w-4 text-status-na" />;
+    if (status === 1) return <CheckCircle className="h-5 w-5 text-status-ok flex-shrink-0" />;
+    if (status === 0) return <XCircle className="h-5 w-5 text-status-error flex-shrink-0" />;
+    return <AlertCircle className="h-5 w-5 text-status-na flex-shrink-0" />;
   };
 
   const getStatusLabel = (status: number | string) => {
@@ -84,7 +75,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
 
   const disciplineProgress = getProgressValue(student.Disciplinas_Percentual);
   const paymentProgress = getProgressValue(student.Cobrancas_Percentual);
-  const financialSituation = getFinancialSituation(student.Cobrancas_Percentual);
+  const financialSituation = getFinancialSituation(student);
 
   return (
     <Sheet open={isOpen} onOpenChange={() => onClose()}>
@@ -100,7 +91,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
-          {/* Basic Info */}
+          {/* Informações Básicas */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -143,7 +134,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
             </CardContent>
           </Card>
 
-          {/* Status Pillars */}
+          {/* Status dos Pilares */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -154,8 +145,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 {statusItems.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    {/* MODIFICAÇÃO AQUI: Adicione um div com flex-col */}
+                  <div key={item.label} className="flex items-start justify-between p-3 rounded-lg bg-muted/30 min-h-[60px]">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">{item.label}</span>
                       <span className="text-sm text-muted-foreground">{getStatusLabel(item.value)}</span>
@@ -167,7 +157,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
             </CardContent>
           </Card>
 
-          {/* Progress */}
+          {/* Progresso Acadêmico */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -190,7 +180,10 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
                 </div>
                 <Progress value={paymentProgress} className="h-2" />
                 <div className="mt-1">
-                  <Badge variant={financialSituation === 'Em dia' ? 'default' : 'destructive'}>
+                  <Badge variant={
+                    financialSituation === 'Inadimplente' ? 'destructive' : 
+                    financialSituation === 'Quitado' ? 'default' : 'secondary'
+                  }>
                     {financialSituation}
                   </Badge>
                 </div>
@@ -198,7 +191,7 @@ export function StudentDetailPanel({ student, isOpen, onClose }: StudentDetailPa
             </CardContent>
           </Card>
 
-          {/* Certificates */}
+          {/* Certificados */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">

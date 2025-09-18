@@ -60,13 +60,11 @@ export function StudentTable({ students, onViewStudent }: StudentTableProps) {
 
   const getFinancialBadgeVariant = (situation: string) => {
     switch (situation) {
-      case 'Em dia':
+      case 'Quitado':
         return 'default';
-      case 'Atraso leve':
+      case 'Em dia':
         return 'secondary';
-      case 'Atraso médio':
-        return 'outline';
-      case 'Inadimplente grave':
+      case 'Inadimplente':
         return 'destructive';
       default:
         return 'outline';
@@ -77,7 +75,6 @@ export function StudentTable({ students, onViewStudent }: StudentTableProps) {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  // Reset to first page when search changes
   useMemo(() => {
     setCurrentPage(1);
   }, [searchTerm]);
@@ -115,7 +112,7 @@ export function StudentTable({ students, onViewStudent }: StudentTableProps) {
             </TableHeader>
             <TableBody>
               {paginatedStudents.map((student, index) => {
-                const financialSituation = getFinancialSituation(student.Cobrancas_Percentual);
+                const financialSituation = getFinancialSituation(student);
                 
                 return (
                   <TableRow key={`${student.CPF}-${index}`} className="hover:bg-muted/50">
